@@ -1,0 +1,18 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/avr-gcc",
+      "-c",
+      "-Wall",
+      "-Os",
+      "-DF_CPU=16000000UL",
+      "-mmcu=atmega328p",
+      "-o",
+      "main.elf",
+      "main.c"
+    ],
+    "directory": "/home/sam/workspace/atmega/pwm",
+    "file": "/home/sam/workspace/atmega/pwm/main.c",
+    "output": "/home/sam/workspace/atmega/pwm/main.elf"
+  }
+]
