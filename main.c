@@ -12,6 +12,10 @@
 #define MOSI PB3
 #define SCK PB5
 #define SS PB2
+#define BUTTON_DDR DDRD
+#define BUTTON_PORT PORTD
+#define BUTTON_PINR PIND
+#define BUTTON_PIN PD6
 
 
 #define CS_LOW()   (PORTB &= ~(1 << PB2))
@@ -67,6 +71,23 @@ static void spi_init() {
 
 
 
+static void button_init(){
+    BUTTON_DDR &= ~(1 << BUTTON_PIN);
+
+    // NO pull-up (external resistor used)
+    BUTTON_PORT &= ~(1 << BUTTON_PIN);
+}
+
+uint8_t button_pressed(void)
+{
+    if (BUTTON_PINR & (1 << BUTTON_PIN)) {
+        _delay_ms(20);  // debounce
+        if (BUTTON_PINR & (1 << BUTTON_PIN)) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 
 void matrix_print(uint8_t (*matrix)[MATRIX_WIDTH]) {
@@ -74,50 +95,139 @@ void matrix_print(uint8_t (*matrix)[MATRIX_WIDTH]) {
     for (int i =  0; i < MATRIX_HEIGHT; i++) {
         unsigned int bin = 0;
         for (int j = 0; j < MATRIX_WIDTH; j++) {
-            bin = (bin << 1) | matrix[i][j];
+            bin = (bin << 1) | matrix[j][i];
         }
         max7219_write(i+1, bin);
     }
 }
 
 void matrix_clear(uint8_t (*matrix)[MATRIX_WIDTH]) {
-    for (int i =  0; i < MATRIX_HEIGHT; i++) {
-        for (int j = 0; j < MATRIX_WIDTH; j++) {
+    for (int i =  0; i < MATRIX_WIDTH; i++) {
+        for (int j = 0; j < MATRIX_HEIGHT; j++) {
             matrix[i][j] = 0;
         }
     }
 }
 
-int main(void) {
-    spi_init();
-    max7219_init();
-    // for (uint8_t r = 1; r <= 255; r++) {
-    //     max7219_write(1, r);
-    //     _delay_ms(50);
-    // }
-    uint8_t matrix[MATRIX_WIDTH][MATRIX_HEIGHT] = {
-        {1,1,0,1,1,1,1,1},
-        {1,1,0,1,1,1,1,1},
-        {1,1,0,1,1,0,0,0},
-        {1,1,0,1,1,0,0,0},
-        {1,1,0,1,1,0,0,0},
-        {1,1,0,1,1,0,0,0},
-        {1,1,1,1,1,0,0,0},
-        {1,1,1,1,1,0,0,0}
-    };
+    void rotate_right(int *a, int n)
+{
+    int last = a[n - 1];
+    for (int i = n - 1; i > 0; i--) {
+        a[i] = a[i - 1];
+    }
+    a[0] = last;
+}
+void shift_right(uint8_t *a)
+{
+    uint8_t first = a[0];
 
-    matrix_clear(matrix);
-    for (int i =  0; i < MATRIX_HEIGHT; i++) {
-        for (int j = 0; j < MATRIX_WIDTH; j++) {
-            matrix[i][j] = 1;
-            matrix_print(matrix);
-            _delay_ms(50);
+    for (int i = 0; i < MATRIX_WIDTH - 1; i++) {
+        a[i] = a[i + 1];
+    }
+
+    a[MATRIX_WIDTH - 1] = first;
+}
+
+void spawn(uint8_t *a, uint8_t size) {
+
+    uint8_t cnt = 0;
+    for (int i = 0; i < MATRIX_WIDTH; i++) {
+        if (cnt < size) {
+            a[i] = 1;
+            cnt++;
         }
     }
 
+}
 
+void clean_row(uint8_t *a, uint8_t *last_row) {
+    uint8_t cnt = 0;
+    uint8_t high = 0;
+    uint8_t high_bit = 0;
 
+    //cut of smaller side
+    for (int i = 0; i < MATRIX_WIDTH; i++) {
+        if (a[i] == 1) {
+            cnt++;
+        } else {
+            cnt = 0;
+        }
+        if (cnt > high) {
+            high = cnt;
+            high_bit = i;
+        }
+    }
 
+    for (int i = 0; i < MATRIX_WIDTH; i++) {
+        if (i < high_bit - high || i > high_bit || last_row[i] == 0) {
+            a[i] = 0;
+        }
+    }
 
 }
 
+uint8_t count_ones(uint8_t *a) {
+    uint8_t count = 0;
+    for (int i = 0; i < MATRIX_WIDTH; i++) {
+        if (a[i] == 1) {
+            count++;
+        }
+    }
+    return count;
+}
+
+void rotate90_cw(int n, uint8_t a[n][n])
+{
+    // transpose
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            uint8_t tmp = a[i][j];
+            a[i][j] = a[j][i];
+            a[j][i] = tmp;
+        }
+    }
+
+    // reverse each row
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n / 2; j++) {
+            uint8_t tmp = a[i][j];
+            a[i][j] = a[i][n - 1 - j];
+            a[i][n - 1 - j] = tmp;
+        }
+    }
+}
+
+int main(void) {
+
+    button_init();
+    spi_init();
+    max7219_init();
+    uint8_t matrix[MATRIX_WIDTH][MATRIX_HEIGHT] = {
+        {0,0,0,0,0,0,0,0},
+        {0,0,0,0,0,0,0,0},
+        {0,0,0,0,0,0,0,0},
+        {0,0,0,0,0,0,0,0},
+        {0,0,0,0,0,0,0,0},
+        {0,0,0,0,0,0,0,0},
+        {0,0,0,0,0,0,0,0},
+        {0,1,1,1,1,1,1,0}
+    };
+
+    uint8_t rowx = 7;
+    
+    uint8_t *last_row = matrix[rowx];
+    while(1){
+        if (button_pressed()) {
+            clean_row(matrix[rowx], last_row);
+            uint8_t size = count_ones(matrix[rowx]);
+            last_row = matrix[rowx];
+            rowx--;
+            spawn(matrix[rowx], size);
+
+        }
+        _delay_ms(100);
+        matrix_print(matrix);
+        shift_right(matrix[rowx]);
+
+    }
+}
