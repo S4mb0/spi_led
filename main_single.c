@@ -132,7 +132,7 @@ void matrix_print(uint8_t (*matrix)[MATRIX_WIDTH]) {
             // bin = (bin << 1) | matrix[j][i];
             bin = (bin << 1) | (matrix[j][i] & 1u); //saver
         }
-        max7219_write_module(2, i+1, bin);
+        max7219_write(i+1, bin);
     }
 }
 
@@ -254,34 +254,35 @@ static inline uint8_t button_is_down(void)
 static void handle_button_press(uint8_t *row)
 {
     _delay_ms(30); // debounce press
-
-    if (button_is_down()) {
-        if (game_state == INGAME) {
-            clean_row(*row);
-            speed += 10;
-            if (*row == 0) {
-                game_state = END;
-            } else {
-                uint8_t size = count_ones(row);
-                (*row)--;
-                spawn_row(*row, size);
-                if (count_ones(row) == 0) {
-                    game_state = END;
-                }
-
-                check_game_state(*row);
-            }
-        } else { // END -> restart
-            init_game(row);
-        }
-
-        while (button_is_down()) { }  // wait release
-        _delay_ms(20);                // debounce release
+    if (!button_is_down()) {
+        button_pressed = 0;
+        return;
     }
 
+    if (game_state == INGAME) {
+        clean_row(*row);
+        speed += 10;
+        if (*row == 0) {
+            game_state = END;
+        } else {
+            uint8_t size = count_ones(row);
+            (*row)--;
+            spawn_row(*row, size);
+            if (count_ones(row) == 0) {
+                game_state = END;
+            }
+
+            check_game_state(*row);
+        }
+    } else { // END -> restart
+        init_game(row);
+    }
+
+
     button_pressed = 0;
-    EIFR  |= (1 << INTF0);  // clear pending flag
-    EIMSK |= (1 << INT0);   // re-enable INT0
+    // EIFR  |= (1 << INTF0);  // clear pending flag
+    // EIMSK |= (1 << INT0);   // re-enable INT0
+    _delay_ms(100);
 }
 
 int main(void)
@@ -311,12 +312,12 @@ int main(void)
         }
 
         matrix_print(matrix);
-        delay_ms(100-speed);
+        delay_ms(200-speed);
     }
 }
 
 ISR(INT0_vect)
 {
     button_pressed = 1;
-    EIMSK &= ~(1 << INT0);   // disable INT0
+    // EIMSK &= ~(1 << INT0);   // disable INT0
 }
